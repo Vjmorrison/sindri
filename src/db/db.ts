@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { config } from '../config';
 import { migrations } from './migrations';
 
-class DatabaseService {
+export class DatabaseService {
   private db: sqlite3.Database | null = null;
 
   async init(): Promise<void> {
