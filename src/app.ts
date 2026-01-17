@@ -3,6 +3,13 @@ import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
 import projectRoutes from './routes/project.routes';
+import { dbService } from './db/db';
+
+// Initialize Database
+dbService.init().catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
+});
 
 const app: Application = express();
 

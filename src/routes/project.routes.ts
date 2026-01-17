@@ -260,10 +260,14 @@ router.post('/instantiate', async (req: Request, res: Response) => {
  *       404:
  *         description: Session not found
  */
-router.get('/session/:id', (req: Request, res: Response) => {
-  const session = projectService.getSession(req.params.id as string);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
-  res.json(session);
+router.get('/session/:id', async (req: Request, res: Response) => {
+  try {
+    const session = await projectService.getSession(req.params.id as string);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    res.json(session);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;
