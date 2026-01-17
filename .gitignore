@@ -41,3 +41,6 @@ client/coverage/
 .mimir/
 node_modules/
 GEMINI.md
+
+# SQLite
+*.db

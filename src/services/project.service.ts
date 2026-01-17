@@ -2,45 +2,46 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ProjectSession, DirectoryStructure, ChatMessage } from '../types/project';
 import { geminiService } from './gemini.service';
-import { randomUUID } from 'crypto';
+import { projectRepository } from '../repositories/project.repository';
 
 export class ProjectService {
-  private sessions: Map<string, ProjectSession> = new Map();
 
   async createSession(description: string): Promise<ProjectSession> {
-    const id = randomUUID();
-    const session: ProjectSession = {
-      id,
-      description,
-      history: [],
-      status: 'active',
-    };
+    const session = await projectRepository.createSession(description);
     
     // Initial BA response
     const initialResponse = await geminiService.chat([], `Hi, I want to start a new project: ${description}`);
-    session.history.push({ role: 'model', text: initialResponse });
     
-    this.sessions.set(id, session);
+    const message: ChatMessage = { role: 'model', text: initialResponse };
+    await projectRepository.addMessage(session.id, message);
+    session.history.push(message);
+
     return session;
   }
 
-  getSession(id: string): ProjectSession | undefined {
-    return this.sessions.get(id);
+  async getSession(id: string): Promise<ProjectSession | undefined> {
+    return await projectRepository.getSession(id);
   }
 
   async respond(id: string, text: string): Promise<string> {
-    const session = this.sessions.get(id);
+    const session = await projectRepository.getSession(id);
     if (!session) throw new Error('Session not found');
 
+    const userMsg: ChatMessage = { role: 'user', text };
+    await projectRepository.addMessage(id, userMsg);
+    // Add to history context for next call
+    session.history.push(userMsg);
+
     const response = await geminiService.chat(session.history, text);
-    session.history.push({ role: 'user', text });
-    session.history.push({ role: 'model', text: response });
+
+    const modelMsg: ChatMessage = { role: 'model', text: response };
+    await projectRepository.addMessage(id, modelMsg);
     
     return response;
   }
 
   async generateArtifacts(id: string): Promise<DirectoryStructure> {
-    const session = this.sessions.get(id);
+    const session = await projectRepository.getSession(id);
     if (!session) throw new Error('Session not found');
 
     const structureJson = await geminiService.generateStructure(session.history);
@@ -49,18 +50,18 @@ export class ProjectService {
     const cleanedJson = structureJson.replace(/```json|```/g, '').trim();
     const structure: DirectoryStructure = JSON.parse(cleanedJson);
     
-    session.artifacts = structure;
-    session.status = 'generating';
+    await projectRepository.saveArtifacts(id, structure);
+    await projectRepository.updateStatus(id, 'generating');
     
     return structure;
   }
 
   async instantiateProject(id: string, targetPath: string): Promise<void> {
-    const session = this.sessions.get(id);
+    const session = await projectRepository.getSession(id);
     if (!session || !session.artifacts) throw new Error('Session or artifacts not found');
 
     await this.createFileSystem(session.artifacts, targetPath, session.history);
-    session.status = 'completed';
+    await projectRepository.updateStatus(id, 'completed');
   }
 
   private async createFileSystem(node: DirectoryStructure, currentPath: string, history: ChatMessage[]): Promise<void> {
